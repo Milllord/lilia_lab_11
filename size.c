@@ -1,33 +1,41 @@
 #include <stdio.h>
+
 #include <unistd.h>
+
 #include <sys/types.h>
+
 #include <sys/stat.h>
+
 #include <unistd.h>
+
 #include <stdio.h>
+
 #include <dirent.h>
+
 #include <string.h>
+
 #include <sys/stat.h>
+
 #include <stdlib.h>
+
 #include <fcntl.h>
 
 // Функция возвращает размер файла в байтах
 // На вход подается файл текущей дериктории
-int get_file_size_in_bytes(char* filename)
-{
+int get_file_size_in_bytes(char * filename) {
     // Структура, хранящая инфу о файле
     // Из нее берем размер файла в байтах
     struct stat st;
     // Записываем инфу о файле в структурку
-    stat(filename, &st);
+    stat(filename, & st);
     // Возвращаем размер файла
     return st.st_size;
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char * argv[]) {
     // Директория полученная от пользователя
     // Через аргумент командной строки
-    char* dirname = argv[1];
+    char * dirname = argv[1];
 
     // массив для общения через пайп
     // или декрипторов файла
@@ -41,44 +49,103 @@ int main(int argc, char* argv[])
     int id = fork();
     int x = 0;
 
+    /*
+        Первый уровенЬ
+    */
+
     // Ребенок 1
-    if (id == 0)
+        /*
+            В текущей дериктории
+            Суммирует размеры всех файлов
+            Пишет размер в пайп
+        */
+    //
+    if (id == 0) 
     {
         int fd2[2];
         pipe(fd2);
         int id2 = fork();
+
+        /*
+            ВТОРОЙ УРОВЕНЬ
+        */
+
         // Ребенок 2
-        if (id2 == 0)
+            /*
+                Считывает дерикторию, которая была передана родителем
+                Суммирует размеры всех файлов
+                Пишет размер в пайп
+            */
+        //
+
+        if (id2 == 0) 
         {
+            // Ребенок 2
             close(fd2[0]);
-
-            x = 99;
-            
-            write(fd2[1], &x, sizeof(int));
+            write(fd2[1], & x, sizeof(int));
         }
+        
         // Родитель 2
-        else
+            /*
+                В текущей дериктории
+                Считает в ней количество файлов
+                Пишет размер в пайп
+            */
+        //
+
+        else 
         {
+             
+            // Родитель 2
+            printf("Текущая дериктория: %s\n", dirname);
+            // Открываем директорию и считаем размер файлов в ней
+            DIR *dir;
+            struct dirent *dirp;
+            dir=opendir(dirname);
+            chdir(dirname);
+            while((dirp=readdir(dir))!=NULL)
+            {
+                if(dirp->d_type==4)
+                {
+                    if(strcmp(dirp->d_name, ".")==0 
+                        || strcmp(dirp->d_name, "..")==0)
+                    {
+                        continue;
+                    }
+                    // Если дериктория
+                }
+                else
+                {
+                    // Если файл
+                    x += get_file_size_in_bytes(dirp->d_name);
+                    printf("После файла %s суммарный размер %d бит\n", dirp->d_name, x);
+                }
+            }
+            // Записываем полученный размер в дескриптор
+            write(fd2[1], &x, sizeof(int));
+            // Закрываем его
             close(fd2[1]);
-
-
-
-            read(fd2[0], &x, sizeof(int));
         }
-        write(fd[1], &x, sizeof(int));
+        int size = 0; 
+        // Записываем размер из процесса в size
+        read(fd2[0], &size, sizeof(int));
+        // Записываем размер в канал родительского процесса
+        write(fd[1], &size, sizeof(int));
+        // Закрываем его дескриптор
+        close(fd[1]);
     }
 
     // Родитель 1
-    else
+    else 
     {
         // Закрываем канал записи
         close(fd[1]);
         int size;
-        read(fd[0], &size, sizeof(int));
+        read(fd[0], & size, sizeof(int));
         printf("Размер дериктории %s - %d байт\n", dirname, size);
         close(fd[0]);
     }
-    
+
     return 0;
 }
 
